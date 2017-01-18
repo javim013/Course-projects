@@ -1,0 +1,518 @@
+---
+title: "Stats 101A Final Exam"
+author: "Javier Magallanes Mendoza"
+date: "December 8, 2015"
+output: html_document
+---
+
+# The data
+
+The data set contains information from the Ames Assessor's Office for individual residential properties sold in Ames, Iowa from 2006 to 2010.
+
+```{r}
+download.file("https://www.openintro.org/stat/data/ames.csv", destfile = "ames.csv")
+ames <- read.csv("ames.csv")
+ames_original <- ames  # a copy of the original data in case you need to go back
+```
+
+## Data Descriptions (Important)
+
+Descriptions of each variable can be found in this documentation: <http://www.amstat.org/publications/jse/v19n3/decock/datadocumentation.txt>
+
+# Simple Linear Regression (worth 50%)
+
+_1. Construct a scatterplot between the `SalePrice` of a house and its size Greater Living Area (Gr.Liv.Area). Comment on the plot. Does it seem like a linear model is appropriate for the data? Do you notice any unusual data points?_
+
+```{r}
+library(ggplot2)
+ggplot(ames, aes(x = Gr.Liv.Area, y = SalePrice)) + geom_point()
+```
+
+The relationship of SalePrice versus above grade living area (Gr.Liv.Area) does not appear to be linear. The variance in sale price increases as the above grade living area increases. There also appears to be slight curvature in the scatter plot, which strongly indicates that a linear model might not be appropriate for the data. There are a few points which are unusual, as these have extremely high values of above grade living area. 
+
+_2. Fit a SLR model between `SalePrice` and the square footage of the house `Gr.Liv.Area`._
+
+```{r}
+salepr <- lm(SalePrice ~ Gr.Liv.Area, data = ames)
+summary(salepr)
+```
+
+Inspecting the summary of the linear model, we can see that the intercept and the predictor variable have highly significant t-values. The linear model corresponds with an r-squared value of 0.4995, which indicates that this can be an alright model.
+
+_3. Create diagnostic plots for the model. Identify points with very high leverage and/or Cook's distances. What can be said about these 5 houses? Read the Special Notes section in the documentation. Based on the special notes, it appears that we should go ahead and also remove all rows where Sale.Condition is not "normal"._
+
+```{r}
+par(mfrow = c(2, 2))
+plot(salepr)
+```
+
+_Diagnostics_
+
+All the diagnostics show that there are problems with this model. First, the residuals vs fitted values do not show random error, and there is clearly funneling. Second, the scale location plot shows that this model has problems of non-constant variance, due to the especially steep slope in predicting the square root of the standardized residuals from fitted values. Third, the Normal Q-Q indicates that our data does not follow a normal distribution, since the ends seem to deviate significantly from a straight line. Fourth, there are several points with high leverage and which are outliers, which can be deduced from the Cook's distance of the model. These data with high leverage must be looked into.
+
+_Data with high leverage_
+
+Using the identify function in the base package, we can see which the homes with high leverage are. There are three outliers: the first is a home with ``r ames[2182, 48]`` sq. ft. Gr.Liv.Area and `$`r ames[2182, 82]`` sale price; the second has ``r ames[2181, 48]`` sq. ft Gr.Liv.Area and `$`r ames[2181, 82]`` sale price; the third has ``r ames[1499, 48]`` sq. ft. Gr.Liv.Area and was sold for `$`r ames[1499, 82]``. These were all sold under a partial sale condition. The other homes which have high leverage have relatively high above grade square footage and high price. The first of these homes had ``r ames[1761, 48]`` of sq. ft. Gr.Liv.Area and sold for `$`r ames[1761, 82]`` the other had ``r ames[1768, 48]`` of sq. ft. Gr.Liv.Area and a sale price of `$`r ames[1768, 82]``.
+
+
+_4. Refit the linear model with the filtered data. Print the summary table. How does the removal of these points affect the regression coefficients? How does their removal affect the R-squared value?_
+```{r}
+library(dplyr)
+ames2 <- filter(ames, Gr.Liv.Area <= 4000 & Sale.Condition == "Normal")
+newsalepr <- lm(SalePrice ~ Gr.Liv.Area, data = ames2)
+summary(newsalepr)
+```
+
+Removing the five properties discussed above and fitting a new model of SalePrice predicted by Gr.Liv.Area, we can run the summary of the new model. The summary shows that now, the predictor variables remain significant. A good indicator that this is an improvement upon the previous model is that the r-squared value has now increased to 0.535. 
+
+_5. Create a scatter plot between the variables showing the best fit line. Create diagnostic plots for the revised model. Comment on them. Describe any deficiencies with the current model._
+```{r}
+ggplot(ames2, aes(x = Gr.Liv.Area, y = SalePrice)) + 
+  geom_point() + 
+  stat_smooth(method = "lm", se = FALSE)
+par(mfrow = c(2, 2))
+plot(newsalepr)
+```
+
+Comparing the diagnostics of the new model, we can see many improvements. The residuals vs. fitted show more random error. However, there appears to errors of non-constant variance since this plot has a funnel shape. This suspicion is corroborated by inspecting the scale location plot which shows less non-constant variance, but the problem has not been properly fixed. The normal Q-Q shows that this new model has a more normal shape. And the most significant improvement is that most of the standard residuals of the data fall between -4 and 4 standard deviations from the fitted regression model. There are no longer outliers or data with alarming leverage.
+
+Nonetheless, the problem of non-constant variance seems to be persistent. This is the most alarming aspect of the new model. These problems indicate that the linear model should be transformed.
+
+_6. Apply a log transform to both the sale price and area of the house. Fit a linear model between the transformed variables. Print the summary table. Create a scatter plot between the variables showing the best fit line. Plot the boundaries of a 95% prediction interval. Create diagnostic plots. Comment on the fit of the model. Identify any unusual points._
+```{r}
+#Fitting a linear model
+logames2 <- data.frame(log(ames2$Gr.Liv.Area), log(ames2$SalePrice))
+names(logames2) <- c("logGr.Liv.Area", "logSalePrice")
+
+logmod <- lm(logSalePrice ~ logGr.Liv.Area, data = logames2)
+summary(logmod)
+
+#Plotting the 95% prediction interval
+xprd1 <- seq(from = min(logames2$logGr.Liv.Area), to = max(logames2$logGr.Liv.Area), length.out = 100)
+yprd1 <- predict(logmod, data.frame(logGr.Liv.Area = xprd1), interval = "prediction", level = 0.95)
+xprd2 <- exp(xprd1)
+yprd2 <- exp(yprd1)
+yprd3 <- as.data.frame(cbind(xprd2, yprd2))
+ggplot(yprd3, aes(x = xprd2, y = fit)) +
+  geom_line() +
+  geom_smooth(aes(ymin = lwr, ymax = upr), stat = "identity") +
+  geom_point(data = ames2,aes(x = Gr.Liv.Area, y = SalePrice))
+
+#Diagnostic plots for the log transformation
+par(mfrow = c(2,2))
+plot(logmod)
+```
+
+Once a log transformation is applied to the data, the diagnostics show even more improvement. First, in the Residuals vs. Fitted plot, we are starting to see less pattern and more random error. I believe that this plot shows a good progress. Our scale-location plot shows that there are no longer problems of non-constant variance, as the slope of the square root of the standardized residuals vs. fitted value appears to be nearly zero. The Normal Q-Q follows more of a straight line, although it seems like some data is affecting the shape of our line. Examining the Cook's distance plot, we see that there are no signs of data which have high leverage or are outliers. The standard residuals show that most of them fall  between -2 and 2 standard deviations from the fitted regression model. 
+
+_7. Fit a weighted least squares model between the sale price and area of the house. For the weights use 1/area. Print the summary table. Create a scatter plot between the variables showing the best fit line. Plot the boundaries of a 95% prediction interval. Create diagnostic plots. Comment on the fit of the model. Identify any unusual points._
+```{r}
+#Fitting a weighted least squares model
+wSalePrice <- ames2$SalePrice * sqrt(1/ames2$Gr.Liv.Area)
+wght <- sqrt(1/ames2$Gr.Liv.Area)
+wGr.Liv.Area <- ames2$Gr.Liv.Area * sqrt(1/ames2$Gr.Liv.Area)
+weightames2 <- data.frame(wSalePrice, wght, wGr.Liv.Area)
+weightlm <- lm(wSalePrice ~ wght + wGr.Liv.Area - 1, data = weightames2)
+summary(weightlm)
+
+#Plotting the 95% prediction interval
+xprd4 <- data.frame(wght = seq(from = min(weightames2$wght), to = max(weightames2$wght), length.out = 100), wGr.Liv.Area = seq(from = min(weightames2$wGr.Liv.Area), to = max(weightames2$wGr.Liv.Area), length.out = 100))
+yprd4 <- predict(weightlm, newdata = xprd4, interval = "prediction", level = 0.95)
+xprd5 <- xprd4 * (1 / sqrt(1/ames2$Gr.Liv.Area))
+yprd5 <- as.data.frame(yprd4) * (1 / sqrt(1/ames2$Gr.Liv.Area))
+yprd6 <- as.data.frame(cbind(xprd5, yprd5))
+ggplot(yprd6, aes(x = wGr.Liv.Area, y = fit)) +
+  geom_line() +
+  geom_smooth(aes(ymin = lwr, ymax = upr), stat = "identity") + 
+  geom_point(data = ames2, aes(x = Gr.Liv.Area, y = SalePrice))
+
+#Diagnostic plots
+par(mfrow = c(2,2))
+plot(weightlm)
+```
+
+The diagnostics show that this is an alright model that could be improved upon. First, the residuals vs. fitted values do not show some random error, but there is some slight funneling evident in the plot. Non-constant variance remains a problem, as we can tell by the  significant slope of the predicted values of the square root of the standardized residuals vs fitted values. The Normal Q-Q shows that there are also some problems, as the data do not appear to be normal. This new model reveals that there are some points with high leverage, but they are not outliers. The standardized residuals fall mostly between -4 and 4 standard deviations from the fitted regression model.
+
+Furthermore, observing the 95% prediction interval plot, we can see that this model seems to over fit the data. Not only does it over fit the data, but it seems like the range of our linear model does not create predictions for the whole scope of the ames data. Since this model over fits, it does not reveal any significant details in the relationship between above grade area and sale price.
+
+
+_8. Between the models you created in problems 4, 6, and 7, choose the model which you believe best explains the relationship between the area of the house and the sale price of the house. Explain your decision._
+
+Based on the diagnostic plots and the 95% prediction intervals, I will have to select the model from problem 6—the log transform model— since it best explains the relationship between the area of a house and its sale price. Out of the three models, this is the only model that most successfully handles the issue of non-constant variance. Not only that, but it seems like this model is the best compromise between the under fitting evident in the model from problem 2 and the over fitting of the model from problem 7. This model shows how there is a positive relationship between area and sale price. As the area of a home increases, the sale price seems to increase. Also, as the area of a home increases, the interval which we can predict becomes larger, and this is not explained by the weighted least squares model. 
+
+_9. For your selected model, create a 95% confidence interval for the coefficients. Do your best to provide an interpretation for these coefficients._
+
+```{r}
+xprd.1 <- seq(from = min(logames2$logGr.Liv.Area), to = max(logames2$logGr.Liv.Area), length.out = 100)
+yprd.1 <- predict(logmod, data.frame(logGr.Liv.Area = xprd.1), interval = "confidence", level = 0.95)
+xprd.2 <- exp(xprd.1)
+yprd.2 <- exp(yprd.1)
+
+yprd.3 <- as.data.frame(cbind(xprd.2, yprd.2))
+
+ggplot(yprd.3, aes(x = xprd.2, y = fit)) +
+  geom_line() +
+  geom_smooth(aes(ymin = lwr, ymax = upr), stat = "identity") +
+  geom_point(data = ames2, aes(x = Gr.Liv.Area, y = SalePrice))
+```
+
+```{r}
+head(yprd.3)
+tail(yprd.3)
+```
+
+The confidence interval for the coefficients show that when we have homes with small area—such as 300 ft. sq.—we have a confidence interval of about $2000. As a home's area increases, the confidence interval becomes wider. For example homes in the 1700 ft. sq range have a confidence interval that ranges about $2500 above or below the fit. The homes with the largest area have a confidence interval which ranges by about $10,000. 
+
+The confidence interval shows us the region for which we are 95% confident that the sale price of all the homes in the Ames market fall, based on the home's area. It helps us establish that in the population of Ames, there is a positive correlation between a home's area and its sale price.
+
+# Multiple Linear Regression (worth 50%)
+
+_10. A naive attempt to fit a full model may involve writing a command like this:`lm(SalePrice ~ . , data = ames)`, where `ames` is the filtered data set from above. What happens when you do this? This issue is often created because of missing data in categorical columns. Find the number of missing values for each column of the data. (Complete this task within R. Hint: try using is.na(). With 82 columns, a short loop can accomplish the task.) Print out these results._
+
+```{r, eval = FALSE}
+#Fitting the full model
+lm(SalePrice ~ . , data = ames2)
+```
+
+A naive attempt at fitting a full model from the filtered data gives the Error: 
+
+Error in `contrasts<-`(`*tmp*`, value = contr.funs[1 + isOF[nn]]) : 
+  contrasts can be applied only to factors with 2 or more levels_
+  
+Therefore, it is evident that in order to create a multiple linear regression model, the data is going to have to be cleaned.
+
+```{r}
+#Creating a function to count number of NAs
+countna <- function(x){
+  y <- is.na(x) == TRUE
+  print(sum(y))
+}
+```
+
+```{r, eval = FALSE}
+#Number of NA per column
+(c(Order = countna(ames2$Order), PID = countna(ames2$PID), MS.Subclass = countna(ames2$MS.SubClass), MS.Zoning = countna(ames2$MS.Zoning), Lot.Frontage = countna(ames2$Lot.Frontage), Lot.Area = countna(ames2$Lot.Area), Street = countna(ames2$Street), Alley = countna(ames2$Alley), Lot.Shape = countna(ames2$Lot.Shape), Land.Contour = countna(ames2$Land.Contour), Utilities = countna(ames2$Utilities), Lot.Config = countna(ames2$Lot.Config), Land.Slope = countna(ames2$Land.Slope), Neighborhood = countna(ames2$Neighborhood), Condition.1 = countna(ames2$Condition.1), Condition.2 = countna(ames2$Condition.2), Bldg.Type = countna(ames2$Bldg.Type), House.Style = countna(ames2$House.Style), Overall.Qual = countna(ames2$Overall.Qual), Overall.Cond = countna(ames2$Overall.Cond), Year.Built = countna(ames2$Year.Built), Year.Remod.Add = countna(ames2$Year.Remod.Add), Roof.Style = countna(ames2$Roof.Style), Roof.Matl = countna(ames2$Roof.Matl), Exterior.1st = countna(ames2$Exterior.1st), Exterior.2nd = countna(ames2$Exterior.2nd), Mas.Vnr.Type = countna(ames2$Mas.Vnr.Type), Ms.Vnr.Area = countna(ames2$Mas.Vnr.Area), Exter.Qual = countna(ames2$Exter.Qual), Exter.Cond = countna(ames2$Exter.Cond), Foundation = countna(ames2$Foundation), Bsmt.Qual = countna(ames2$Bsmt.Qual), Bsmt.Cond = countna(ames2$Bsmt.Cond), Bsmt.Exposure = countna(ames2$Bsmt.Exposure), BsmtFin.Type.1 = countna(ames2$BsmtFin.Type.1), BsmtFin.SF.1 = countna(ames2$BsmtFin.SF.1), BsmtFin.Type.2 = countna(ames2$BsmtFin.Type.2), BsmtFin.SF.2 = countna(ames2$BsmtFin.SF.2), Total.Bsmt.SF = countna(ames2$Total.Bsmt.SF), Bsmt.Unf.SF = countna(ames2$Bsmt.Unf.SF), Heating = countna(ames2$Heating), Heating.QC = countna(ames2$Heating.QC), Central.Air = countna(ames2$Central.Air), Electrical = countna(ames2$Electrical), X1st.Flr.SF = countna(ames2$X1st.Flr.SF), X2nd.Flr.SF = countna(ames2$X2nd.Flr.SF), Low.Qual.Fin.SF = countna(ames2$Low.Qual.Fin.SF), Gr.Liv.Area = countna(ames2$Gr.Liv.Area), Bsmt.Full.Bath = countna(ames2$Bsmt.Full.Bath), Bsmt.Half.Bath = countna(ames2$Bsmt.Half.Bath), Full.Bath = countna(ames2$Full.Bath), Half.Bath = countna(ames2$Half.Bath), Bedroom.AbvGr = countna(ames2$Bedroom.AbvGr), Kitchen.AbvGr = countna(ames2$Kitchen.AbvGr), Kitchen.Qual = countna(ames2$Kitchen.Qual), TotRms.AbvGrd = countna(ames2$TotRms.AbvGrd), Functional = countna(ames2$Functional), Fireplaces = countna(ames2$Fireplaces), Fireplace.Qu = countna(ames2$Fireplace.Qu), Garage.Type = countna(ames2$Garage.Type), Garage.Yr.Blt = countna(ames2$Garage.Yr.Blt), Garage.Finish = countna(ames2$Garage.Finish), Garage.Cars = countna(ames2$Garage.Cars), Garage.Area = countna(ames2$Garage.Area), Garage.Qual = countna(ames2$Garage.Qual), Garage.Cond = countna(ames2$Garage.Cond), Paved.Drive = countna(ames2$Paved.Drive), Wood.Deck.SF = countna(ames2$Wood.Deck.SF), Open.Porch.SF = countna(ames2$Open.Porch.SF), Enclosed.Porch = countna(ames2$Enclosed.Porch), X3Ssn.Porch = countna(ames2$X3Ssn.Porch), Screen.Porch = countna(ames2$Screen.Porch), Pool.Area = countna(ames2$Pool.Area), Pool.QC = countna(ames2$Pool.QC), Fence = countna(ames2$Fence), Misc.Feature = countna(ames2$Misc.Feature), Misc.Val = countna(ames2$Misc.Val), Mo.Sold = countna(ames2$Mo.Sold), Yr.Sold = countna(ames2$Yr.Sold), Sale.Type = countna(ames2$Sale.Type), Sale.Condition = countna(ames2$Sale.Condition), SalePrice = countna(ames2$SalePrice)))
+```
+
+The above gives the result
+```c
+          Order             PID     MS.Subclass       MS.Zoning    Lot.Frontage        Lot.Area          Street 
+              0               0               0               0             451               0               0 
+          Alley       Lot.Shape    Land.Contour       Utilities      Lot.Config      Land.Slope    Neighborhood 
+           2258               0               0               0               0               0               0 
+    Condition.1     Condition.2       Bldg.Type     House.Style    Overall.Qual    Overall.Cond      Year.Built 
+              0               0               0               0               0               0               0 
+ Year.Remod.Add      Roof.Style       Roof.Matl    Exterior.1st    Exterior.2nd    Mas.Vnr.Type     Ms.Vnr.Area 
+              0               0               0               0               0               0              11 
+     Exter.Qual      Exter.Cond      Foundation       Bsmt.Qual       Bsmt.Cond   Bsmt.Exposure  BsmtFin.Type.1 
+              0               0               0              67              67              67              67 
+   BsmtFin.SF.1  BsmtFin.Type.2    BsmtFin.SF.2   Total.Bsmt.SF     Bsmt.Unf.SF         Heating      Heating.QC 
+              0              67               0               0               0               0               0 
+    Central.Air      Electrical     X1st.Flr.SF     X2nd.Flr.SF Low.Qual.Fin.SF     Gr.Liv.Area  Bsmt.Full.Bath 
+              0               0               0               0               0               0               1 
+ Bsmt.Half.Bath       Full.Bath       Half.Bath   Bedroom.AbvGr   Kitchen.AbvGr    Kitchen.Qual   TotRms.AbvGrd 
+              1               0               0               0               0               0               0 
+     Functional      Fireplaces    Fireplace.Qu     Garage.Type   Garage.Yr.Blt   Garage.Finish     Garage.Cars 
+              0               0            1164             116             117             116               0 
+    Garage.Area     Garage.Qual     Garage.Cond     Paved.Drive    Wood.Deck.SF   Open.Porch.SF  Enclosed.Porch 
+              0             117             117               0               0               0               0 
+    X3Ssn.Porch    Screen.Porch       Pool.Area         Pool.QC           Fence    Misc.Feature        Misc.Val 
+              0               0               0            2403            1910            2316               0 
+        Mo.Sold         Yr.Sold       Sale.Type  Sale.Condition       SalePrice 
+              0               0               0               0               0 
+```
+
+The variables Alley, Fireplace.Qu, Pool.QC, Fence, and Misc. Feature have an alarming number of data with value NA. 
+
+_11. Remove the following columns from the dataset: `Lot.Frontage`, `Alley`, `Fireplace.Qu`, `Pool.QC`, `Fence`, `Misc.Feature`, and any `Garage` related variable with missing data because these variables have a high count of missing values. Also remove the variable `Sale.Condition`, as it is now a factor with only one level. Filter the data further with the command `na.omit` to remove any rows with missing data. Print the dimensions of your filtered data set._
+
+```{r}
+ames2 <- ames2[, c(-5, -8, -59, -60, -61, -62, -63, -64, -65, -66, -74, -75, -76, -81)]
+ames2 <- na.omit(ames2)
+
+dimension.ames2 <- dim(ames2)
+v <- as.data.frame(dimension.ames2)
+row.names(v) <- c("observations", "variables")
+v
+```
+
+_12. Try fitting a full model to predict SalePrice. Be sure not to include the variables `Order` and `PID`, as these are numbers used to keep track of the records. Print out the summary table._
+```{r}
+lmfull <- lm(SalePrice ~ MS.SubClass + MS.Zoning + Lot.Area + Street + Lot.Shape + Land.Contour + Utilities + Lot.Config + Land.Slope + Neighborhood + Condition.1 + Condition.2 + Bldg.Type + House.Style + Overall.Qual + Overall.Cond + Year.Built + Year.Remod.Add + Roof.Style + Roof.Matl + Exterior.1st + Mas.Vnr.Type + Mas.Vnr.Area + Exter.Qual + Exter.Cond + Foundation + Bsmt.Qual + Bsmt.Cond + Bsmt.Exposure + BsmtFin.Type.1 + BsmtFin.SF.1 + BsmtFin.Type.2 + BsmtFin.SF.2 + Bsmt.Unf.SF + Heating + Heating.QC + Central.Air + Electrical + X1st.Flr.SF + X2nd.Flr.SF + Low.Qual.Fin.SF + Bsmt.Full.Bath + Bsmt.Half.Bath + Full.Bath + Half.Bath + Bedroom.AbvGr + Kitchen.AbvGr + Kitchen.Qual + TotRms.AbvGrd + Functional + Fireplaces + Paved.Drive + Wood.Deck.SF + Open.Porch.SF + Enclosed.Porch + X3Ssn.Porch + Screen.Porch + Pool.Area + Misc.Val + Mo.Sold + Yr.Sold + Sale.Type + Gr.Liv.Area + Total.Bsmt.SF + Exterior.2nd , data = ames2)
+
+summary(lmfull)
+```
+
+The summary of the full model from the again filtered data shows that there some variables whose coefficients are NA. These are Gr.Liv.Area, Total.Bsmt.SF, and two ordinal values under the variable Exterior.2nd. This does not indicate an invalid model. This model has a corresponding r-squared value of 0.9458, which is really high given that so many variables are insignificant.
+
+_13. The categorical variables have been turned into dummy variables. This is especially aparent with some of the neighborhoods. Identify which neighborhoods appear to have a significant impact on the price of the house. Create a boxplot of SalePrice vs Neighborhoods._
+
+```{r}
+ggplot(ames2, aes(x = Neighborhood, y = SalePrice)) + geom_boxplot() + coord_flip()
+```
+
+The neighborhoods which make a home more expensive are: Northridge, Northridge Heights, Stone Brook, and Veenker. In these neighborhoods homes have sale prices ranging from short of $200,000 up to more than $600,000. The neighborhoods in which homes are cheaper are: Briardale, and Meadow Village, which have a short range, indicating that homes are are relatively inexpensive.
+
+_14. What other nominal variables appear to have a significant impact on the SalePrice of the house? Does being near the railroad or near a park seem to affect the sale price?_
+
+```{r}
+#General zoning classification compared to Sale Price
+ggplot(ames2, aes(x = MS.Zoning, y = SalePrice)) + geom_boxplot()
+```
+
+__Examining the boxplot, we can see that homes in `Floating Village Residential` and `Residential Low Density` zones sale for higher prices, while the homes in a `Commercial` zone sell for less. Commercial zones have a significant impact on SalePrice.__
+
+```{r}
+#Type of road access compared to Sale Price
+ggplot(ames2, aes(x = Street, y = SalePrice)) + geom_boxplot()
+```
+
+__Homes with `Paved` road access sell for more than homes with gravel access. Thus, the type of road access does impact sale price.__
+
+```{r}
+#Flatness of property compared to Sale Price
+ggplot(ames2, aes(x = Land.Contour, y = SalePrice)) + geom_boxplot()
+```
+
+__Land contour does not seem to have an impact on Sale Price since we see homes on a hillside sell for the same price as homes on near flat or level surface.__
+
+```{r}
+#Lot configuration compared to Sale Price
+ggplot(ames2, aes(x = Lot.Config, y = SalePrice)) + geom_boxplot()
+```
+
+__Lot configuration does not affect sale price. All different configurations can sell for the same price as any other configuration.__
+
+```{r}
+#Proximity to one conditions compared to Sale Price
+ggplot(ames2, aes(x = Condition.1, y = SalePrice)) + geom_boxplot()
+```
+
+__Homes that are adjacent to an arterial street sell slightly less than homes with other conditions. Thus, homes having one condition are affected by those conditions only slightly.__
+
+
+```{r}
+#Proximity to more than one condition compared to Sale Price
+ggplot(ames2, aes(x = Condition.2, y = SalePrice)) + geom_boxplot()
+```
+
+__Homes which are near or adjacent  to a positive offsite feature such as a park or a greenbelt sell for significantly higher than homes with a combination of other conditions. Thus, homes near parks and other open areas of recreation have considerably higher sale prices. These conditions heavily influence sell price.__
+
+```{r}
+#Type of dwelling compared to Sale Price
+ggplot(ames2, aes(x = Bldg.Type, y = SalePrice)) + geom_boxplot()
+```
+
+__Different types of dwellings do not have an impact on sale price.__
+
+```{r}
+#Style of dwelling compared to Sale Price
+ggplot(ames2, aes(x = House.Style, y = SalePrice)) + geom_boxplot()
+```
+
+__For the most part, the style of dwelling does not affect sale price. Dwellings of the `One and one-half story: 2nd level unfinished` sell for slightly less than all other dwelling styles. Also homes of the `Two and one-half story: 2nd level finished` sell slightly higher than other dwelling styles.__
+
+```{r}
+#Type of roof compared to Sale Price
+ggplot(ames2, aes(x = Roof.Style, y = SalePrice)) + geom_boxplot()
+```
+
+__Roof type does not have a significant impact on a home's sale price.__
+
+```{r}
+#Exterior covering compared to Sale Price
+ggplot(ames2, aes(x = Exterior.1st, y = SalePrice)) + geom_boxplot() + coord_flip()
+```
+
+__A home's exterior covering does not impact the sale price. The different coverings seem to sell at about the same price.__
+
+```{r}
+#Multiple exterior coverings compared to Sale Price
+ggplot(ames2, aes(x = Exterior.2nd, y = SalePrice)) + geom_boxplot() + coord_flip()
+```
+
+__Multiple exterior coverings do affect slightly the sale price. For instance, homes with `Imitation stucco` and `Vinyl siding` seem to make a home's price increase. All the other coverings affect a home just about the same.__
+
+```{r}
+#Masonry veneer type compared to Sale Price
+ggplot(ames2, aes(x = Mas.Vnr.Type, y = SalePrice)) + geom_boxplot()
+```
+
+__Masonry veneer type `Brick common` will sell for significantly lower prices than homes with brick face, none, or stone.__
+
+```{r}
+#Type of foundation compared to Sale Price
+ggplot(ames2, aes(x = Foundation, y = SalePrice)) + geom_boxplot()
+```
+
+__All foundation types will sell for about the same price, expect if a home has a `Poured concrete` foundation. Those homes will sell higher than homes with other types of foundation.__
+
+```{r}
+#Type of heating compared to Sale Price
+ggplot(ames2, aes(x = Heating, y = SalePrice)) + geom_boxplot()
+```
+
+__Homes with `Gravity furnace` heating will sell less than homes with gas forced warm air furnace ot gas hot water or steam heat heating. Perhaps this is present in older homes, which would indicate the lower pricing.__
+
+```{r}
+#Central AC compared to Sale Price
+ggplot(ames2, aes(x = Central.Air, y = SalePrice)) + geom_boxplot()
+```
+
+__Homes that do have `Central AC` will usually go for higher sale prices than homes without.__
+
+```{r}
+#Type of sell compared to Sale Price
+ggplot(ames2, aes(x = Sale.Type, y = SalePrice)) + geom_boxplot()
+```
+
+__Sell type does not impact a home's Sale Price.__
+
+_15. Many of the Quality ratings (e.g. Kitchen Quality, Basement Exposure, Basement Quality, Exterior Quality, Exterior Condition, etc.) are coded as nominal values (Good, Typical, Poor, etc.) but may serve the purposes of our modeling better as a numeric variable (eg. 1 to 5 stars). Recode these variables as such. Convert the ordinal variables as you see fit. The nominal variables (like neighborhood or exterior covering) cannot be coverted to numeric values._
+
+
+```{r}
+ames2$Exter.Qual <- factor(ames2$Exter.Qual, levels = c("Po", "Fa", "TA", "Gd", "Ex"))
+ames2$Exter.Qual <- as.numeric(ames2$Exter.Qual)
+ames2$Exter.Cond <- factor(ames2$Exter.Cond, levels = c("Po", "Fa", "TA", "Gd", "Ex"))
+ames2$Exter.Cond <- as.numeric(ames2$Exter.Cond)
+ames2$Bsmt.Exposure <- factor(ames2$Bsmt.Exposure, levels = c("", "No", "Mn", "Av", "Gd"))
+ames2$Bsmt.Exposure <- as.numeric(ames2$Bsmt.Exposure)
+ames2$Heating.QC <- factor(ames2$Heating.QC, levels = c("Po", "Fa", "TA", "Gd", "Ex"))
+ames2$Heating.QC <- as.numeric(ames2$Heating.QC)
+ames2$Kitchen.Qual <- factor(ames2$Kitchen.Qual, levels = c("Po", "Fa", "TA", "Gd", "Ex"))
+ames2$Kitchen.Qual <- as.numeric(ames2$Kitchen.Qual)
+```
+
+We have converted the characters indicating levels of ordinal variables into numeric values from 1 to 5. There are some variables of the ordinal kind with more than five levels, I have decided to not change these as to keep the rating scale strictly from 1 to 5.
+
+_16. Using BIC, try a running a forward stepwise variable selection method. For this section of the code, please set the rmarkdown option to eval=FALSE. Run the command on your computer, but just copy and paste your resulting model here._
+```{r, eval = FALSE}
+nointmodel <- lm(SalePrice ~ 1, data = ames2)
+n <- length(lmfull$residuals)
+forwardBIC <- step(nointmodel, scope = list(lower = ~ 1, upper = ~ MS.SubClass + MS.Zoning + Lot.Area + Street + Lot.Shape + Land.Contour + Utilities + Lot.Config + Land.Slope + Neighborhood + Condition.1 + Condition.2 + Bldg.Type + House.Style + Overall.Qual + Overall.Cond + Year.Built + Year.Remod.Add + Roof.Style + Roof.Matl + Exterior.1st + Mas.Vnr.Type + Mas.Vnr.Area + Exter.Qual + Exter.Cond + Foundation + Bsmt.Qual + Bsmt.Cond + Bsmt.Exposure + BsmtFin.Type.1 + BsmtFin.SF.1 + BsmtFin.Type.2 + BsmtFin.SF.2 + Bsmt.Unf.SF + Heating + Heating.QC + Central.Air + Electrical + X1st.Flr.SF + X2nd.Flr.SF + Low.Qual.Fin.SF + Bsmt.Full.Bath + Bsmt.Half.Bath + Full.Bath + Half.Bath + Bedroom.AbvGr + Kitchen.AbvGr + Kitchen.Qual + TotRms.AbvGrd + Functional + Fireplaces + Paved.Drive + Wood.Deck.SF + Open.Porch.SF + Enclosed.Porch + X3Ssn.Porch + Screen.Porch + Pool.Area + Misc.Val + Mo.Sold + Yr.Sold + Sale.Type + Gr.Liv.Area + Total.Bsmt.SF + Exterior.2nd), direction = "forward", data = ames2, k = log(n))
+```
+
+The result from running the forward BIC selection method gives the following. The BIC value of the model is minimized with the following variables at a value of 46391.73
+```c
+Step:  AIC=46391.73
+SalePrice ~ Overall.Qual + Gr.Liv.Area + BsmtFin.SF.1 + Neighborhood + 
+    MS.SubClass + Bsmt.Exposure + Kitchen.Qual + Bsmt.Qual + 
+    Lot.Area + Overall.Cond + Year.Built + Total.Bsmt.SF + Bedroom.AbvGr + 
+    Bldg.Type + Mas.Vnr.Area + Screen.Porch + Exter.Qual + BsmtFin.SF.2 + 
+    Functional + Condition.2 + Mas.Vnr.Type + Fireplaces + Heating.QC + 
+    Bsmt.Full.Bath
+```
+
+_17. Create diagnostic plots for this model. Comment on its quality and whether you believe this is a valid model or not. If we assume that it is a valid model, how much of the variation in the sale price can be accounted for by the model?_
+```{r}
+model <- lm(SalePrice ~ Overall.Qual + Gr.Liv.Area + BsmtFin.SF.1 + Neighborhood + MS.SubClass + Bsmt.Exposure + Kitchen.Qual + Bsmt.Qual + Lot.Area + Overall.Cond + Year.Built + Total.Bsmt.SF + Bedroom.AbvGr + Bldg.Type + Mas.Vnr.Area + Screen.Porch + Exter.Qual + BsmtFin.SF.2 + Functional + Condition.2 + Mas.Vnr.Type + Fireplaces + Heating.QC + Bsmt.Full.Bath, data = ames2)
+
+par(mfrow = c(2, 2))
+plot(model)
+```
+
+Examining the diagnostics plots reveal that there are some problems with the model as it currently is. The residuals vs. fitted plot does not show any funneling, but a slight curve can be discerned. This is indicating that our model is not accounting in its full potential for the variables which most impact sale price. The scale-location plot shows that there is non-constant variance. Furthermore, there are many data with high leverage, which is alarming although the cook's distance plot does not reveal any outliers. 
+
+
+```{r}
+#Added variable Plots of the forward BIC model
+library(car)
+par(mfrow = c(2, 2))
+avPlots(model, ~ Overall.Qual)
+avPlots(model, ~ Gr.Liv.Area)
+avPlots(model, ~ BsmtFin.SF.1)
+avPlots(model, ~ MS.SubClass)
+```
+
+```{r}
+par(mfrow = c(2,2))
+avPlots(model, ~ Bsmt.Exposure)
+avPlots(model, ~ Kitchen.Qual)
+avPlots(model, ~ Lot.Area)
+avPlots(model, ~ Overall.Cond)
+```
+
+```{r}
+par(mfrow = c(2, 2))
+avPlots(model, ~ Year.Built)
+avPlots(model, ~ Total.Bsmt.SF)
+avPlots(model, ~ Bedroom.AbvGr)
+avPlots(model, ~ Mas.Vnr.Area)
+```
+
+```{r}
+par(mfrow = c(2, 2))
+avPlots(model, ~ Screen.Porch)
+avPlots(model, ~ Exter.Qual)
+avPlots(model, ~ BsmtFin.SF.2)
+avPlots(model, ~ Fireplaces)
+```
+
+```{r}
+par(mfrow = c(1, 2))
+avPlots(model, ~ Heating.QC)
+avPlots(model, ~ Bsmt.Full.Bath)
+```
+
+In order to see redundancy and which variables do not account for sale price, I decided to inspect the added variable plots of the numerical variables and the transformed ordinal variables. It seems like the variables `BsmtFin.SF.1`, `MS.SubClass`, `Bsmt.Exposure`, `Kitchen.Qual`, `Screen.Porch`, `Exter.Qual`, `BsmtFin.SF.2`, `Fireplaces`, `Heating.QC`, and `Bsmt.Full.Bath` are redundant and do not prove useful in predicting sale price.
+
+Thus, this model is very flawed, as I believe that it has too many predictor variables which are insignificant. 
+
+_18. Here are two possible models that do not include any nominal variables. (They do use a few ordinal variables that have been converted to numeric variables.)_
+
+```{r}
+#Suggested model 1
+suggested_model <- lm(SalePrice ~ Gr.Liv.Area + Total.Bsmt.SF + Lot.Area + Year.Built + Overall.Qual + Overall.Cond + Kitchen.Qual, data = ames2)
+par(mfrow= c(2, 2))
+plot(suggested_model)
+```
+
+This first suggested model is not a valid model and we cannot use it to make any predictions. I have come to this conclusion several ways. The residuals vs fitted plot clearly shows some kind of curvature, which would indicate that some type of transformation would be needed to make the model valid. Signs of non-constant variance are very clear from the scale location plot, which also shows some curvature and deviates from an expected flat slope for a model with constant variance. This model would have to be filtered, since there are some outliers pointed out by cook's distance.
+
+```{r}
+#Added variable plots for suggested model 1
+par(mfrow = c(2, 2))
+avPlots(suggested_model, ~ Gr.Liv.Area)
+avPlots(suggested_model, ~ Total.Bsmt.SF)
+avPlots(suggested_model, ~ Lot.Area)
+avPlots(suggested_model, ~ Year.Built)
+```
+
+```{r}
+par(mfrow = c(2, 2))
+avPlots(suggested_model, ~ Overall.Qual)
+avPlots(suggested_model, ~ Overall.Cond)
+avPlots(suggested_model, ~ Kitchen.Qual)
+```
+
+```{r}
+#Suggested model 2
+suggested_model2 <- lm(log(SalePrice) ~ Gr.Liv.Area + Total.Bsmt.SF + Lot.Area + Year.Built + Overall.Qual + Overall.Cond + Kitchen.Qual, data = ames2)
+par(mfrow = c(2, 2))
+plot(suggested_model2)
+```
+
+```{r}
+#Added variable plots for suggested model 2
+par(mfrow = c(2, 2))
+avPlots(suggested_model2, ~ Gr.Liv.Area)
+avPlots(suggested_model2, ~ Total.Bsmt.SF)
+avPlots(suggested_model2, ~ Lot.Area)
+avPlots(suggested_model2, ~ Year.Built)
+```
+
+```{r}
+par(mfrow = c(2, 2))
+avPlots(suggested_model2, ~ Overall.Qual)
+avPlots(suggested_model2, ~ Overall.Cond)
+avPlots(suggested_model2, ~ Kitchen.Qual)
+```
+
+This second suggested model—with Sale Price log transformed—is an improvement upon the first suggested model. The residuals vs. fitted plot shows random error. There is no discernible pattern indicating an invalid model. Furthermore, the issue of heteroscedasticity—or non-constant variance—seems to have been dealt with properly by transforming the predicted variable. The Normal Q-Q plot shows that the data follows a normal distribution since it the normal Q-Q follows a straight line. There is some concern, however, from the cook's distance plot, as there are some points that are outliers.
+
+_Comment on their differences, which model you think is better, and concerns that you have regarding the models._
+
+The plots differ mostly in that the first model shows evidence of non-constant variance while the second model does not show this problem. I think that the second model is the better model. It is the better model for the reasons discussed above, but also examining the AV plots of the first model and the second model gave me further insight in to the usefulness of the predictor variables. In the first model, there are several variables which seem to be redundant, such as `Overall.Qual`, `Over.Cond`, and `Kitchen.Qual`. These variables which seem redundant in the first plot show stronger impact on the predictor variable when it is transformed using log. Thus, I rule the transformed model to be best out of the two.
+
+My concern is that the `832`nd, `1363`rd, and the `1789`nth observations are outliers and they are significantly affecting the model. I tried to compare all three homes to see if there was a commonality that would suggest the removal of these data, but I was unable to find any. Removing these data would not be recommended. Since this is the only alarming aspect of the model, I believe that it is still useful in making predictions and in understanding the relationship between the predictor variables and the predicted variable.
