@@ -1,0 +1,58 @@
+library(Lahman)
+library(dplyr)
+library(car)
+
+
+data(Teams)
+
+nouvelequipe <- filter(Teams, yearID >= "2010")
+gagnant1 <- lm(W ~ R + AB + H + X2B + X3B + HR + BB + SO + SB + CS + HBP + SF + RA + ER + ERA + CG + SHO + SV + IPouts + HA + HRA + BBA + SOA + E + DP + FP + BPF + PPF, data = nouvelequipe)
+summary(gagnant1)
+
+gagnant2 <- lm(W ~ R + AB + H + SV + IPouts + HRA, data = nouvelequipe)
+summary(gagnant2)
+
+gagnant3 <- lm(W ~ R + SV + IPouts, data = nouvelequipe)
+summary(gagnant3)
+
+standardres1 <- rstandard(gagnant3)
+
+plot(nouvelequipe$R, standardres1, xlab = "Team ranking", ylab = "Standardized Residuals")
+
+plot(nouvelequipe$SV, standardres1, xlab = "Number of saves", ylab = "Standardized Residuals")
+
+plot(nouvelequipe$IPouts, standardres1, xlab = "Number of outs pitched", ylab = "Standardized Residuals")
+
+fitvals <- fitted(gagnant3)
+plot(fitvals, nouvelequipe$W, xlab = "Fitted values", ylab = "Wins")
+
+par(mfrow = c(2, 2))
+plot(gagnant2)
+
+nouvelequipe[c(48, 56, 57, 101),]
+
+pairs(W ~ R + SV + IPouts, data = nouvelequipe, main = "Scatterplot Matrix")
+
+powerTransform(nouvelequipe[,c(9, 15, 32, 33)])
+
+trans <- bcPower(nouvelequipe[,c(9, 15, 32, 33)], c(1.4, 0.4, 0.6, -2.87)) 
+names(trans) <- c("tw", "tr", "tsv", "tipouts")
+
+gagnant4 <- lm(tw ~ tr + tsv, data = trans)
+summary(gagnant4)
+
+plot(gagnant4)
+
+trprd <- bcPower(600, 0.4)
+invPT <- function(x, lambda){ 
+(x*(lambda) + 1)^(1/lambda)
+}
+invPT(trprd, 0.4)
+
+tsvprd <- bcPower(36, 0.6) 
+invPT(tsvprd, 0.6)
+ 
+wprd <- predict(gagnant4, data.frame(tr = trprd, tsv = tsvprd), interval = "prediction") 
+invPT(wprd, 1.4)
+
+ 
